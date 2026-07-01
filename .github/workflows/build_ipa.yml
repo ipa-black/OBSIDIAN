@@ -21,7 +21,7 @@ jobs:
           brew install xcodegen
           brew install ldid
 
-      # 1. حقن الأكواد البرمجية (مع تصحيح خطأ URL الغبي)
+      # 1. حقن الأكواد وصناعة شاشة الإقلاع لكسر وضع التوافق
       - name: Synthesize Swift Source Code and Assets
         run: |
           mkdir -p Sources
@@ -88,9 +88,11 @@ jobs:
               private let obsGray = Color(red: 0.08, green: 0.08, blue: 0.10)
               private let obsGold = Color(red: 0.85, green: 0.72, blue: 0.25)
               var body: some View {
-                  GeometryReader { geometry in
-                      ZStack {
-                          obsBlack.ignoresSafeArea()
+                  ZStack {
+                      // التصاق تام بجميع الحواف دون استثناء
+                      obsBlack.ignoresSafeArea(.all)
+                      
+                      GeometryReader { geometry in
                           VStack(spacing: 0) {
                               HStack(spacing: 15) {
                                   ObsidianCrystal().fill(LinearGradient(gradient: Gradient(colors: [obsGold, .orange]), startPoint: .top, endPoint: .bottom))
@@ -99,6 +101,7 @@ jobs:
                                   Spacer()
                               }
                               .padding(.horizontal, 24).padding(.vertical, 16).background(obsGray.ignoresSafeArea(edges: .top))
+                              
                               ScrollView(showsIndicators: false) {
                                   VStack(spacing: 24) {
                                       VStack(alignment: .leading, spacing: 16) {
@@ -244,8 +247,37 @@ jobs:
           cat << 'EOF' > Sources/Assets.xcassets/AppIcon.appiconset/Contents.json
           { "images" : [], "info" : { "author" : "xcode", "version" : 1 } }
           EOF
+          
+          # الملف السحري لكسر وضع التوافق (LaunchScreen.storyboard)
+          cat << 'EOF' > Sources/LaunchScreen.storyboard
+          <?xml version="1.0" encoding="UTF-8"?>
+          <document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21507" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
+              <device id="retina6_12" orientation="portrait" appearance="light"/>
+              <dependencies>
+                  <deployment identifier="iOS"/>
+                  <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="21505"/>
+                  <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+                  <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+              </dependencies>
+              <scenes>
+                  <scene sceneID="EHf-IW-A2E">
+                      <objects>
+                          <viewController id="01J-lp-oVM" sceneMemberID="viewController">
+                              <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
+                                  <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                                  <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                  <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
+                                  <color key="backgroundColor" red="0.019607843137254902" green="0.019607843137254902" blue="0.027450980392156862" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                              </view>
+                          </viewController>
+                          <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
+                      </objects>
+                  </scene>
+              </scenes>
+          </document>
+          EOF
 
-      # 2. توليد Info.plist
+      # 2. توليد Info.plist وإخباره باستخدام شاشة الإقلاع الجديدة
       - name: Generate Perfect Info.plist
         run: |
           cat << 'EOF' > Info.plist
@@ -267,8 +299,8 @@ jobs:
               <string>1</string>
               <key>LSRequiresIPhoneOS</key>
               <true/>
-              <key>UILaunchScreen</key>
-              <dict/>
+              <key>UILaunchStoryboardName</key>
+              <string>LaunchScreen</string>
               <key>UIRequiredDeviceCapabilities</key>
               <array><string>arm64</string></array>
           </dict>
@@ -345,7 +377,7 @@ jobs:
         with:
           tag_name: latest-app
           name: "OBSIDIAN Production IPA"
-          body: "النسخة النهائية من تطبيق OBSIDIAN. مبني بنجاح بدون أخطاء السويفت الغبية."
+          body: "تم كسر وضع التوافق! التطبيق الآن يعمل بدقة شاشتك الأصلية ويملأ كل بوصة فيها."
           draft: false
           prerelease: false
           files: OBSIDIAN.ipa
