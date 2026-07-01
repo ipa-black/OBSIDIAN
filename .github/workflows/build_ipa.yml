@@ -1,4 +1,4 @@
-name: Build OBSIDIAN IPA & Release (Self-Synthesizing)
+name: Build OBSIDIAN IPA & Release (Full-Screen Shield)
 
 on:
   push:
@@ -21,8 +21,8 @@ jobs:
           brew install xcodegen
           brew install ldid
 
-      # 1. حقن الأكواد وصناعة شاشة الإقلاع لكسر وضع التوافق
-      - name: Synthesize Swift Source Code and Assets
+      # 1. حقن الأكواد البرمجية النظيفة
+      - name: Synthesize Swift Source Code
         run: |
           mkdir -p Sources
           
@@ -89,9 +89,7 @@ jobs:
               private let obsGold = Color(red: 0.85, green: 0.72, blue: 0.25)
               var body: some View {
                   ZStack {
-                      // التصاق تام بجميع الحواف دون استثناء
                       obsBlack.ignoresSafeArea(.all)
-                      
                       GeometryReader { geometry in
                           VStack(spacing: 0) {
                               HStack(spacing: 15) {
@@ -247,67 +245,8 @@ jobs:
           cat << 'EOF' > Sources/Assets.xcassets/AppIcon.appiconset/Contents.json
           { "images" : [], "info" : { "author" : "xcode", "version" : 1 } }
           EOF
-          
-          # الملف السحري لكسر وضع التوافق (LaunchScreen.storyboard)
-          cat << 'EOF' > Sources/LaunchScreen.storyboard
-          <?xml version="1.0" encoding="UTF-8"?>
-          <document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21507" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
-              <device id="retina6_12" orientation="portrait" appearance="light"/>
-              <dependencies>
-                  <deployment identifier="iOS"/>
-                  <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="21505"/>
-                  <capability name="Safe area layout guides" minToolsVersion="9.0"/>
-                  <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
-              </dependencies>
-              <scenes>
-                  <scene sceneID="EHf-IW-A2E">
-                      <objects>
-                          <viewController id="01J-lp-oVM" sceneMemberID="viewController">
-                              <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
-                                  <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
-                                  <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                  <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
-                                  <color key="backgroundColor" red="0.019607843137254902" green="0.019607843137254902" blue="0.027450980392156862" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                              </view>
-                          </viewController>
-                          <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
-                      </objects>
-                  </scene>
-              </scenes>
-          </document>
-          EOF
 
-      # 2. توليد Info.plist وإخباره باستخدام شاشة الإقلاع الجديدة
-      - name: Generate Perfect Info.plist
-        run: |
-          cat << 'EOF' > Info.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>OBSIDIAN</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.obsidian.compiler</string>
-              <key>CFBundleName</key>
-              <string>OBSIDIAN</string>
-              <key>CFBundleDisplayName</key>
-              <string>OBSIDIAN</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0</string>
-              <key>CFBundleVersion</key>
-              <string>1</string>
-              <key>LSRequiresIPhoneOS</key>
-              <true/>
-              <key>UILaunchStoryboardName</key>
-              <string>LaunchScreen</string>
-              <key>UIRequiredDeviceCapabilities</key>
-              <array><string>arm64</string></array>
-          </dict>
-          </plist>
-          EOF
-
-      # 3. إنشاء ملف المشروع
+      # 2. بناء هندسة مشروع XcodeGen وحقن مفاتيح Plist البرمجية مباشرة في بيئة البناء وتغيير الـ Bundle ID لكسر كاش الجهاز!
       - name: Generate Xcode Project Dynamically
         run: |
           cat << 'EOF' > project.yml
@@ -321,8 +260,6 @@ jobs:
               deploymentTarget: "16.0"
               sources:
                 - path: Sources
-              info:
-                path: Info.plist
               settings:
                 base:
                   SWIFT_VERSION: "5.0"
@@ -335,13 +272,20 @@ jobs:
                   CODE_SIGNING_REQUIRED: "NO"
                   CODE_SIGNING_ALLOWED: "NO"
                   CODE_SIGN_IDENTITY: ""
+                  
+                  # ⬇️ الأسلوب الحديث الحاسم لفرض الشاشة الكاملة وإلغاء الكاش
+                  GENERATE_INFOPLIST_FILE: "YES"
+                  INFOPLIST_KEY_CFBundleDisplayName: "OBSIDIAN"
+                  INFOPLIST_KEY_CFBundleIdentifier: "com.obsidian.engineapp" # معرف جديد تماماً لمسح كاش الآيفون
+                  INFOPLIST_KEY_LSRequiresIPhoneOS: "YES"
+                  INFOPLIST_KEY_UILaunchScreen: "{}" # تفعيل محرك شاشة الإقلاع التلقائي لـ SwiftUI لملء الشاشة حتماً
           EOF
           xcodegen generate
 
       - name: Select Latest Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
 
-      # 4. بناء المشروع كـ Release
+      # 3. تجميع التطبيق النظيف
       - name: Compile Source Code
         run: |
           xcodebuild clean build \
@@ -354,7 +298,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      # 5. حقن مساحة توقيع وهمية يدوياً بـ ldid
+      # 4. التغليف وحقن مساحة التوقيع بـ ldid
       - name: Inject Pseudo-Signature and Package IPA
         run: |
           mkdir -p Payload
@@ -377,7 +321,7 @@ jobs:
         with:
           tag_name: latest-app
           name: "OBSIDIAN Production IPA"
-          body: "تم كسر وضع التوافق! التطبيق الآن يعمل بدقة شاشتك الأصلية ويملأ كل بوصة فيها."
+          body: "تم سحق الحواف السوداء! المعرف الجديد مسح كاش الهاتف، والتطبيق الآن يعمل بملء الشاشة الحقيقي المتكامل."
           draft: false
           prerelease: false
           files: OBSIDIAN.ipa
