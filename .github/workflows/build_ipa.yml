@@ -16,13 +16,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # تحميل أداة بناء المشاريع وأداة التوقيع الوهمي ldid ليتوافق مع Feather
       - name: Install XcodeGen and ldid
         run: |
           brew install xcodegen
           brew install ldid
 
-      # 1. حقن الأكواد البرمجية مع إضافة الواردات الناقصة (UIKit)
+      # 1. حقن الأكواد البرمجية (الصلبة والمكتملة)
       - name: Synthesize Swift Source Code
         run: |
           mkdir -p Sources
@@ -43,7 +42,7 @@ jobs:
           
           cat << 'EOF' > Sources/MainDashboardView.swift
           import SwiftUI
-          import UIKit // السطر السحري الذي كان مفقوداً!
+          import UIKit
           
           struct ObsidianCrystal: Shape {
               func path(in rect: CGRect) -> Path {
@@ -241,7 +240,7 @@ jobs:
           }
           EOF
 
-      # 2. توليد Info.plist نقي
+      # 2. توليد Info.plist
       - name: Generate Perfect Info.plist
         run: |
           cat << 'EOF' > Info.plist
@@ -269,7 +268,7 @@ jobs:
           </plist>
           EOF
 
-      # 3. إنشاء ملف المشروع
+      # 3. إنشاء ملف المشروع مع تحديد إصدار السويفت صراحة
       - name: Generate Xcode Project Dynamically
         run: |
           cat << 'EOF' > project.yml
@@ -287,40 +286,41 @@ jobs:
                 path: Info.plist
               settings:
                 base:
+                  SWIFT_VERSION: "5.0"
                   ARCHS: arm64
                   VALID_ARCHS: arm64
                   ONLY_ACTIVE_ARCH: NO
                   ENABLE_BITCODE: NO
+                  CODE_SIGNING_REQUIRED: "NO"
+                  CODE_SIGNING_ALLOWED: "NO"
+                  CODE_SIGN_IDENTITY: ""
           EOF
           xcodegen generate
 
       - name: Select Latest Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
 
-      # 4. بناء المشروع وتجريده من حماية آبل المزعجة
-      - name: Compile Source Code
+      # 4. بناء المشروع كـ Debug لحل تضارب التحسين (-O vs -Onone) وتخطي القيود تماماً
+      - name: Compile Source Code (Debug Mode)
         run: |
           xcodebuild clean build \
             -project OBSIDIAN.xcodeproj \
             -scheme OBSIDIAN \
             -sdk iphoneos \
-            -configuration Release \
+            -configuration Debug \
             -arch arm64 \
             CONFIGURATION_BUILD_DIR=${PWD}/build_output \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      # 5. حقن التوقيع الوهمي (ldid) وتغليف التطبيق ليقبله Feather فوراً!
+      # 5. حقن التوقيع الوهمي (ldid) وتغليف التطبيق ليقبله Feather فوراً
       - name: Inject Pseudo-Signature and Package IPA
         run: |
           mkdir -p Payload
           mv build_output/OBSIDIAN.app Payload/
           
-          # إعطاء الصلاحية للملف التنفيذي
           chmod +x Payload/OBSIDIAN.app/OBSIDIAN
-          
-          # حقن مساحة التوقيع الوهمي باستخدام ldid
           ldid -S Payload/OBSIDIAN.app
           
           zip -r OBSIDIAN.ipa Payload/
@@ -337,7 +337,7 @@ jobs:
         with:
           tag_name: latest-app
           name: "OBSIDIAN Production IPA"
-          body: "جاهز وموقع بتوقيع ldid وهمي. تطبيق Feather سيستقبله بحرارة الآن!"
+          body: "التطبيق تم بناؤه بنجاح وتوقيعه وهمياً عبر ldid. جاهز تماماً لتطبيق Feather!"
           draft: false
           prerelease: false
           files: OBSIDIAN.ipa
