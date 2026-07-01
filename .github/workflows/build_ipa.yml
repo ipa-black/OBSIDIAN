@@ -16,11 +16,51 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # 1. تثبيت أداة توليد المشاريع
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      # 2. توليد ملف المشروع مع حصر المكونات في ملفات السويفت فقط لمنع خلط الأكواد
+      # 1. إنشاء ملف Info.plist حقيقي وكامل يدوياً لضمان عدم وجود أي نقص لهوية التطبيق
+      - name: Generate Perfect Info.plist
+        run: |
+          cat << 'EOF' > Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>OBSIDIAN</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.obsidian.compiler</string>
+              <key>CFBundleName</key>
+              <string>OBSIDIAN</string>
+              <key>CFBundleDisplayName</key>
+              <string>OBSIDIAN</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+              <key>UIApplicationSceneManifest</key>
+              <dict>
+                  <key>UIApplicationSupportsMultipleScenes</key>
+                  <false/>
+              </dict>
+              <key>UILaunchStoryboardName</key>
+              <string>LaunchScreen</string>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+              </array>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array>
+                  <string>arm64</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+      # 2. إخبار أداة التوليد باستخدام الـ Info.plist الخاص بنا وفرض معمارية arm64
       - name: Generate Xcode Project Dynamically
         run: |
           cat << 'EOF' > project.yml
@@ -36,45 +76,43 @@ jobs:
                 - path: .
                   includes:
                     - "**.swift"
+              info:
+                path: Info.plist
               settings:
                 base:
-                  CODE_SIGN_IDENTITY: "-"
-                  CODE_SIGNING_REQUIRED: "NO"
-                  CODE_SIGNING_ALLOWED: "YES"
-                  AD_HOC_CODE_SIGNING_ALLOWED: "YES"
-                  GENERATE_INFOPLIST_FILE: "YES"
-                  INFOPLIST_KEY_CFBundleDisplayName: "OBSIDIAN"
-                  INFOPLIST_KEY_LSRequiresIPhoneOS: "YES"
-                  MARKETING_VERSION: "1.0.0"
-                  CURRENT_PROJECT_VERSION: "1"
+                  ARCHS: arm64
+                  VALID_ARCHS: arm64
+                  ONLY_ACTIVE_ARCH: NO
           EOF
           xcodegen generate
 
       - name: Select Latest Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
 
-      # 3. بناء التطبيق باستخدام التوقيع المحلي الذكي (Ad-Hoc Sign) وتغيير الإعداد لوضع Debug لضمان الاستقرار
-      - name: Compile OBSIDIAN Source Code
+      # 3. بناء التطبيق كـ Release وتعطيل أي نوع من أنواع التوقيع ليخرج خاماً تماماً لـ Feather
+      - name: Compile Unsigned OBSIDIAN Source Code
         run: |
           xcodebuild clean build \
             -project OBSIDIAN.xcodeproj \
             -scheme OBSIDIAN \
             -sdk iphoneos \
-            -configuration Debug \
+            -configuration Release \
+            -arch arm64 \
             CONFIGURATION_BUILD_DIR=${PWD}/build_output \
-            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=YES \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+            CODE_SIGNING_ALLOWED=NO
 
-      # 4. تجميع ملف الـ IPA النظيف
-      - name: Package into Raw IPA
+      # 4. إعطاء الصلاحية للملف التنفيذي وتغليفه كـ IPA
+      - name: Package into Raw Unsigned IPA
         run: |
           mkdir -p Payload
           mv build_output/OBSIDIAN.app Payload/
+          # ضمان أن الملف التنفيذي قابل للتشغيل حتى لا يرفضه برنامج التوقيع
+          chmod +x Payload/OBSIDIAN.app/OBSIDIAN
           zip -r OBSIDIAN.ipa Payload/
 
-      # 5. تنظيف التاج القديم من الريليز
+      # 5. تنظيف التاج القديم
       - name: Clean Old Release Tag
         run: |
           gh release delete latest-app --yes || true
@@ -82,13 +120,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 6. رفع ملف الـ IPA الجاهز تماماً للتحميل والتثبيت
+      # 6. الرفع إلى الإصدارات
       - name: Publish IPA to Releases
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest-app
           name: "OBSIDIAN Production IPA"
-          body: "تم تجميع الأكواد البرمجية بنجاح وصناعة ملف الـ IPA الخام."
+          body: "تطبيق خام تماماً ومجرد من التوقيع. جاهز للتوقيع عبر Feather أو TrollStore."
           draft: false
           prerelease: false
           files: OBSIDIAN.ipa
