@@ -5,7 +5,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# إعطاء الصلاحية للأكشن لإنشاء وتعديل قسم الـ Releases
 permissions:
   contents: write
 
@@ -17,9 +16,42 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
+      # 1. تحميل أداة بناء المشاريع السحرية
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # 2. بناء ملف OBSIDIAN.xcodeproj تلقائياً من أكواد السويفت الموجودة في المستودع
+      - name: Generate Xcode Project Dynamically
+        run: |
+          cat << 'EOF' > project.yml
+          name: OBSIDIAN
+          options:
+            bundleIdPrefix: com.obsidian
+          targets:
+            OBSIDIAN:
+              type: application
+              platform: iOS
+              deploymentTarget: "16.0"
+              sources:
+                - path: .
+                  excludes:
+                    - ".github"
+                    - "project.yml"
+              settings:
+                base:
+                  CODE_SIGNING_REQUIRED: "NO"
+                  CODE_SIGNING_ALLOWED: "NO"
+                  GENERATE_INFOPLIST_FILE: "YES"
+                  CURRENT_PROJECT_VERSION: "1"
+                  MARKETING_VERSION: "1.0.0"
+                  PRODUCT_NAME: "OBSIDIAN"
+          EOF
+          xcodegen generate
+
       - name: Select Latest Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
 
+      # 3. بناء التطبيق بعد أن تم إنشاء المشروع بنجاح وإجباره على الحفظ في مجلد معروف
       - name: Compile OBSIDIAN Source Code
         run: |
           xcodebuild clean build \
@@ -27,30 +59,33 @@ jobs:
             -scheme OBSIDIAN \
             -sdk iphoneos \
             -configuration Release \
+            CONFIGURATION_BUILD_DIR=${PWD}/build_output \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
+      # 4. تغليف التطبيق كملف IPA خام
       - name: Package into Raw IPA
         run: |
           mkdir -p Payload
-          mv build/Release-iphoneos/OBSIDIAN.app Payload/
+          mv build_output/OBSIDIAN.app Payload/
           zip -r OBSIDIAN.ipa Payload/
 
+      # 5. تنظيف قسم الريليز من الإصدارات القديمة
       - name: Clean Old Release Tag
         run: |
-          # نحذف الإصدار القديم إن وجد لضمان تحديث الرابط دائماً
           gh release delete latest-app --yes || true
           git push --delete origin latest-app || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 6. رفع الـ IPA الجديد والمكتمل إلى قسم الإصدارات
       - name: Publish IPA to Releases
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest-app
           name: "OBSIDIAN Latest IPA"
-          body: "تم بناء هذا التطبيق تلقائياً عبر محرك OBSIDIAN. جاهز للتثبيت."
+          body: "تم تجميع وبناء هذا التطبيق بنجاح عبر محرك OBSIDIAN الآلي."
           draft: false
           prerelease: false
           files: OBSIDIAN.ipa
