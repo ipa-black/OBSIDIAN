@@ -1,4 +1,4 @@
-name: Build OBSIDIAN IPA & Release (Full-Screen Shield)
+name: Build OBSIDIAN IPA & Release (Absolute Edge-to-Edge)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
           brew install xcodegen
           brew install ldid
 
-      # 1. حقن الأكواد البرمجية النظيفة
+      # 1. حقن الأكواد البرمجية بالكامل
       - name: Synthesize Swift Source Code
         run: |
           mkdir -p Sources
@@ -246,7 +246,44 @@ jobs:
           { "images" : [], "info" : { "author" : "xcode", "version" : 1 } }
           EOF
 
-      # 2. بناء هندسة مشروع XcodeGen وحقن مفاتيح Plist البرمجية مباشرة في بيئة البناء وتغيير الـ Bundle ID لكسر كاش الجهاز!
+      # 2. توليد Info.plist الذي يحمل السحر (مفتاح UILaunchScreen)
+      - name: Generate Perfect Info.plist
+        run: |
+          cat << 'EOF' > Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>OBSIDIAN</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.obsidian.fullscreen</string>
+              <key>CFBundleName</key>
+              <string>OBSIDIAN</string>
+              <key>CFBundleDisplayName</key>
+              <string>OBSIDIAN</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+              
+              <!-- هذا هو المفتاح الذي يكسر وضع التوافق ويجبر الشاشة الكاملة -->
+              <key>UILaunchScreen</key>
+              <dict/>
+              
+              <key>UIRequiredDeviceCapabilities</key>
+              <array><string>arm64</string></array>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+      # 3. إعداد المشروع مع أمر صريح بمنع توليد الـ Plist التلقائي ليأخذ ملفنا نحن
       - name: Generate Xcode Project Dynamically
         run: |
           cat << 'EOF' > project.yml
@@ -260,6 +297,8 @@ jobs:
               deploymentTarget: "16.0"
               sources:
                 - path: Sources
+              info:
+                path: Info.plist
               settings:
                 base:
                   SWIFT_VERSION: "5.0"
@@ -272,20 +311,14 @@ jobs:
                   CODE_SIGNING_REQUIRED: "NO"
                   CODE_SIGNING_ALLOWED: "NO"
                   CODE_SIGN_IDENTITY: ""
-                  
-                  # ⬇️ الأسلوب الحديث الحاسم لفرض الشاشة الكاملة وإلغاء الكاش
-                  GENERATE_INFOPLIST_FILE: "YES"
-                  INFOPLIST_KEY_CFBundleDisplayName: "OBSIDIAN"
-                  INFOPLIST_KEY_CFBundleIdentifier: "com.obsidian.engineapp" # معرف جديد تماماً لمسح كاش الآيفون
-                  INFOPLIST_KEY_LSRequiresIPhoneOS: "YES"
-                  INFOPLIST_KEY_UILaunchScreen: "{}" # تفعيل محرك شاشة الإقلاع التلقائي لـ SwiftUI لملء الشاشة حتماً
+                  GENERATE_INFOPLIST_FILE: "NO" # الضربة القاضية: منع التوليد التلقائي لتجاوز غباء آبل
           EOF
           xcodegen generate
 
       - name: Select Latest Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
 
-      # 3. تجميع التطبيق النظيف
+      # 4. بناء المشروع
       - name: Compile Source Code
         run: |
           xcodebuild clean build \
@@ -298,7 +331,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      # 4. التغليف وحقن مساحة التوقيع بـ ldid
+      # 5. التوقيع الوهمي والتغليف
       - name: Inject Pseudo-Signature and Package IPA
         run: |
           mkdir -p Payload
@@ -321,7 +354,7 @@ jobs:
         with:
           tag_name: latest-app
           name: "OBSIDIAN Production IPA"
-          body: "تم سحق الحواف السوداء! المعرف الجديد مسح كاش الهاتف، والتطبيق الآن يعمل بملء الشاشة الحقيقي المتكامل."
+          body: "النسخة الخارقة للشاشة الكاملة. تم تعطيل توليد Plist التلقائي لضمان الامتداد الكامل."
           draft: false
           prerelease: false
           files: OBSIDIAN.ipa
