@@ -27,7 +27,7 @@ jobs:
         run: |
           echo "⚙️ تحميل مكتبة Substrate ورأس الملف..."
 
-          # إنشاء مجلد مؤقت للفك
+          # إنشاء مجلد مؤقت
           mkdir -p temp_substrate
           cd temp_substrate
 
@@ -40,7 +40,7 @@ jobs:
 
           cd ..
 
-          # البحث عن ملف الرأس (substrate.h أو CydiaSubstrate.h) ونسخه
+          # --- التعامل مع ملف الرأس ---
           HEADER_FILE=$(find temp_substrate -name "substrate.h" -o -name "CydiaSubstrate.h" | head -n 1)
           if [ -z "$HEADER_FILE" ]; then
             echo "❌ لم يتم العثور على ملف الرأس"
@@ -49,15 +49,31 @@ jobs:
           cp "$HEADER_FILE" sdks_and_libs/substrate.h
           echo "✅ تم نسخ ملف الرأس: $HEADER_FILE"
 
-          # البحث عن المكتبة الديناميكية (CydiaSubstrate.dylib أو libsubstrate.dylib) ونسخها
+          # --- التعامل مع المكتبة الديناميكية ---
           LIB_FILE=$(find temp_substrate -name "CydiaSubstrate.dylib" -o -name "libsubstrate.dylib" | head -n 1)
           if [ -z "$LIB_FILE" ]; then
             echo "❌ لم يتم العثور على ملف المكتبة"
             exit 1
           fi
-          cp "$LIB_FILE" sdks_and_libs/libsubstrate.dylib
-          echo "✅ تم نسخ المكتبة: $LIB_FILE"
+          echo "📦 المكتبة الأصلية: $LIB_FILE"
 
+          # فحص البنيات المتوفرة
+          lipo -info "$LIB_FILE"
+
+          # محاولة استخراج شريحة arm64 (للتطبيقات العادية)
+          if lipo "$LIB_FILE" -verify_arch arm64 2>/dev/null; then
+            echo "➡️ استخراج شريحة arm64..."
+            lipo "$LIB_FILE" -thin arm64 -output sdks_and_libs/libsubstrate.dylib
+          elif lipo "$LIB_FILE" -verify_arch arm64e 2>/dev/null; then
+            echo "➡️ لا توجد arm64، استخدام arm64e (يلزم التوافق مع arm64e)..."
+            lipo "$LIB_FILE" -thin arm64e -output sdks_and_libs/libsubstrate.dylib
+          else
+            # لا توجد شرائح مناسبة، نسخ المكتبة كما هي (قد تنجح مع إعدادات أخرى)
+            echo "⚠️ لم يتم العثور على arm64/arm64e، نسخ المكتبة الأصلية..."
+            cp "$LIB_FILE" sdks_and_libs/libsubstrate.dylib
+          fi
+
+          echo "✅ تم تجهيز مكتبة Substrate النهائية"
           # تنظيف
           rm -rf temp_substrate
 
@@ -73,11 +89,21 @@ jobs:
         run: |
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
 
-          xcrun -sdk iphoneos clang -dynamiclib -arch arm64 \
+          # نحدد البنية بناءً على ما استخرجناه (نتركها arm64 غالبًا، لكن إذا استخدمنا arm64e سنغير)
+          ARCH="arm64"
+          # إذا كان الملف libsubstrate.dylib هو arm64e، سنترجم لـ arm64e أيضًا
+          if lipo -info sdks_and_libs/libsubstrate.dylib | grep -q "arm64e"; then
+            ARCH="arm64e"
+          fi
+
+          echo "🔨 التجميع لبنية: $ARCH"
+
+          xcrun -sdk iphoneos clang -dynamiclib -arch ${ARCH} \
             -isysroot "$SDK_PATH" \
             -F"$SDK_PATH/System/Library/Frameworks" \
             -L./sdks_and_libs \
             -I./sdks_and_libs \
+            -Wno-deprecated-declarations \
             main.m -o generated_dylibs/OBSIDIAN_latest.dylib \
             -framework Foundation -framework UIKit \
             -lsubstrate
