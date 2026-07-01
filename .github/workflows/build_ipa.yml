@@ -16,15 +16,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      # تحميل أداة بناء المشاريع وأداة التوقيع الوهمي ldid ليتوافق مع Feather
+      - name: Install XcodeGen and ldid
+        run: |
+          brew install xcodegen
+          brew install ldid
 
-      # 1. خلق ملفات السويفت برمجياً داخل السيرفر لضمان عدم ضياعها أو فقدانها
+      # 1. حقن الأكواد البرمجية مع إضافة الواردات الناقصة (UIKit)
       - name: Synthesize Swift Source Code
         run: |
           mkdir -p Sources
           
-          # ملف التشغيل الرئيسي
           cat << 'EOF' > Sources/OBSIDIANApp.swift
           import SwiftUI
           @main
@@ -39,9 +41,10 @@ jobs:
           }
           EOF
           
-          # ملف واجهة المستخدم الممتلئة والكاملة
           cat << 'EOF' > Sources/MainDashboardView.swift
           import SwiftUI
+          import UIKit // السطر السحري الذي كان مفقوداً!
+          
           struct ObsidianCrystal: Shape {
               func path(in rect: CGRect) -> Path {
                   var path = Path()
@@ -162,9 +165,9 @@ jobs:
           }
           EOF
           
-          # ملف التحكم المنطقي
           cat << 'EOF' > Sources/CompilerViewModel.swift
           import SwiftUI
+          import Combine
           @MainActor
           final class CompilerViewModel: ObservableObject {
               @Published var objCCode: String = ""
@@ -195,7 +198,6 @@ jobs:
           }
           EOF
           
-          # ملف الاتصال بالشبكة
           cat << 'EOF' > Sources/GitHubService.swift
           import Foundation
           struct GitHubDispatchPayload: Encodable {
@@ -239,7 +241,7 @@ jobs:
           }
           EOF
 
-      # 2. توليد Info.plist نقي تماماً ليعمل في Feather بدون أخطاء التوقيع
+      # 2. توليد Info.plist نقي
       - name: Generate Perfect Info.plist
         run: |
           cat << 'EOF' > Info.plist
@@ -267,7 +269,7 @@ jobs:
           </plist>
           EOF
 
-      # 3. تكوين المشروع مع توجيه صريح للمجلد الذي تم خلقه الآن
+      # 3. إنشاء ملف المشروع
       - name: Generate Xcode Project Dynamically
         run: |
           cat << 'EOF' > project.yml
@@ -295,8 +297,8 @@ jobs:
       - name: Select Latest Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
 
-      # 4. بناء المشروع وتجريده من الحماية نهائياً
-      - name: Compile Unsigned Source Code
+      # 4. بناء المشروع وتجريده من حماية آبل المزعجة
+      - name: Compile Source Code
         run: |
           xcodebuild clean build \
             -project OBSIDIAN.xcodeproj \
@@ -309,12 +311,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      # 5. التغليف وإعطاء الصلاحية بعد ضمان أن الملف موجود مئة بالمئة
-      - name: Package into Raw Unsigned IPA
+      # 5. حقن التوقيع الوهمي (ldid) وتغليف التطبيق ليقبله Feather فوراً!
+      - name: Inject Pseudo-Signature and Package IPA
         run: |
           mkdir -p Payload
           mv build_output/OBSIDIAN.app Payload/
+          
+          # إعطاء الصلاحية للملف التنفيذي
           chmod +x Payload/OBSIDIAN.app/OBSIDIAN
+          
+          # حقن مساحة التوقيع الوهمي باستخدام ldid
+          ldid -S Payload/OBSIDIAN.app
+          
           zip -r OBSIDIAN.ipa Payload/
 
       - name: Clean Old Release Tag
@@ -329,7 +337,7 @@ jobs:
         with:
           tag_name: latest-app
           name: "OBSIDIAN Production IPA"
-          body: "التطبيق يعمل. الأكواد مدمجة ومحصنة. جاهز لـ Feather."
+          body: "جاهز وموقع بتوقيع ldid وهمي. تطبيق Feather سيستقبله بحرارة الآن!"
           draft: false
           prerelease: false
           files: OBSIDIAN.ipa
