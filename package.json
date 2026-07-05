@@ -1,0 +1,11 @@
+{
+  "name": "obsidian-engine",
+  "version": "1.0.0",
+  "description": "OBSIDIAN Single Dylib Builder Telegram Bot",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Hassan Sabah (IPA BLACK)",
+  "license": "MIT"
+}
